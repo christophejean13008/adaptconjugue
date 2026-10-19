@@ -239,10 +239,17 @@ legend+*{clear:both}
 .side .hint{text-align:center}
 .side .corr{font-size:1.15em;white-space:normal}
 .side .big-btn{font-size:1rem;align-self:center;box-shadow:0 4px 0 var(--board-dark)}
-.dragzone{display:flex;flex-direction:column;align-items:center;gap:6px}
-.dragtok{position:relative;width:clamp(48px,4.5vw,70px);aspect-ratio:1;touch-action:none;cursor:grab;animation:hover 1s ease-in-out infinite alternate}
-.dragtok.gone{visibility:hidden}
-.flytok{position:fixed;z-index:50;pointer-events:none;width:var(--sz);height:var(--sz);transform:translate(-50%,-50%) scale(1.08);filter:drop-shadow(0 6px 8px #0e2b6b55)}
+.aimzone{display:flex;flex-direction:column;align-items:center;gap:6px}
+.aim{display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:6px;width:100%}
+.aim button{border:0;border-radius:14px;min-height:56px;font-family:var(--display);font-weight:800;color:#fff;background:var(--tc);box-shadow:0 4px 0 #0003;text-shadow:0 1px 2px #0006;display:grid;place-items:center;padding:0}
+.aim button:active{transform:translateY(3px);box-shadow:0 1px 0 #0003}
+.aim button svg{width:30px;height:30px}
+.aim .drop{background:var(--ink);font-size:1.15rem;line-height:1}
+.ghosts{position:absolute;left:0;right:0;top:0;height:var(--cell);z-index:6;pointer-events:none}
+.mghost{position:absolute;width:calc(var(--cell)*.8*var(--k,1));height:calc(var(--cell)*.8*var(--k,1));left:calc(var(--cell)*(var(--c) + .5) + var(--dx,0px));top:calc(var(--cell)*.5);transform:translate(-50%,-50%);transition:left .14s ease-out}
+.mghost b{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-weight:800;color:#fff;font-size:calc(var(--cell)*.36*var(--k,1));text-shadow:0 1px 3px #0009;z-index:2}
+.mghost::before{content:"";position:absolute;inset:-5px;border-radius:50%;border:3px dashed var(--td);animation:spin 3s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 .colpick{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
 .colpick button{aspect-ratio:1;border:0;border-radius:50%;font-family:var(--display);font-weight:800;font-size:clamp(1rem,1.8vw,1.5rem);color:#fff;text-shadow:0 1px 2px #0007;background:var(--tc);box-shadow:inset 0 -3px 0 #0003;padding:0}
 .colpick button:disabled{opacity:.2}
@@ -348,6 +355,7 @@ legend+*{clear:both}
         <div id="ghost" class="tok ghost"></div>
         <div id="board" class="board"><div id="tokens" class="tokens"></div><div id="plate" class="plate"></div></div>
         <div id="cols" class="cols"></div>
+        <div id="ghosts" class="ghosts"></div>
       </div>
       <div id="side1" class="side" hidden></div>
       <div id="bottom" class="bottom" hidden><div id="side2" class="side"></div><div id="side3" class="side"></div></div>
@@ -539,7 +547,7 @@ function renderTeacher(){
   <fieldset><legend>À 2 ou 4 joueurs</legend>
     <div class="cards two">
       <button class="card-btn" data-k="play" data-v="turn" aria-pressed="${S.play!=='simul'}"><b>Chacun son tour</b><small>Un seul joueur répond à la fois. Il choisit sa colonne sur le plateau, puis la question s'affiche au centre.</small></button>
-      <button class="card-btn" data-k="play" data-v="simul" aria-pressed="${S.play==='simul'}"><b>Tous en même temps</b><small>Chaque joueur a sa propre question sur son côté du plateau : à gauche et à droite, plus deux en dessous à 4 joueurs. Dès qu'il répond juste, il choisit sa colonne. Le plus rapide avance.</small></button>
+      <button class="card-btn" data-k="play" data-v="simul" aria-pressed="${S.play==='simul'}"><b>Tous en même temps</b><small>Chaque joueur a sa propre question sur son côté du plateau : à gauche et à droite, plus deux en dessous à 4 joueurs. Dès qu'il répond juste, son jeton apparaît au-dessus du plateau : il le déplace avec les flèches de son cadre puis appuie sur Lâcher. Le plus rapide avance.</small></button>
     </div>
     <p class="hint">En même temps, au niveau difficile, chaque joueur écrit avec son propre clavier à l'écran.</p></fieldset>
   <fieldset><legend>Temps</legend><div class="chips-row">${TENSES.map(t=>chip('tenses',t.id,t.label,S.tenses.includes(t.id))).join('')}</div>
@@ -620,7 +628,7 @@ function startGame(){
   requestAnimationFrame(tick);
 }
 function buildBoard(){
-  $('#tokens').innerHTML=''; $('#plate').innerHTML='<i></i>'.repeat(ROWS*COLS);
+  $('#ghosts').innerHTML=''; $('#tokens').innerHTML=''; $('#plate').innerHTML='<i></i>'.repeat(ROWS*COLS);
   $('#cols').innerHTML=[...Array(COLS).keys()].map(c=>`<button data-c="${c}" aria-label="Colonne ${c+1}"></button>`).join('');
 }
 function setupArena(){
@@ -683,7 +691,7 @@ function chooseCol(c){
     if(G.phase==='over') return;
     const ready=G.players.map((p,i)=>i).filter(i=>G.players[i].ps==='col');
     if(ready.length===1){ if(lowest(G.grid,c)<0){ toast('Cette colonne est pleine'); return; } placeToken(ready[0],c); }
-    else if(ready.length>1) toast('Fais glisser ton jeton depuis ton cadre');
+    else if(ready.length>1) toast('Utilise les flèches de ton cadre, puis Lâcher');
     return;
   }
   if(!G||G.phase!=='idle') return;
@@ -901,7 +909,7 @@ function tick(now){
 function endGame(w,cells){
   if(G.ended) return; G.ended=true;
   G.phase='over'; renderChips(); setGhost(null);
-  if(G.simul) G.players.forEach((p,i)=>{ clearTimeout(p.fbT); renderPanel(i); });
+  if(G.simul){ G.players.forEach((p,i)=>{ clearTimeout(p.fbT); renderPanel(i); }); renderGhosts(); }
   if(cells) cells.forEach(([r,c])=>{ const el=document.querySelector(`#tokens [data-rc="${r}-${c}"]`); if(el) el.classList.add('win'); });
   const humans=G.mode==='coop'?w===1:w!==0;
   $('#turnMsg').textContent=humans?`${NEED===5?'Cinq':'Quatre'} jetons alignés !`:(G.mode==='coop'?'Chronos a gagné cette manche…':'Match nul !');
@@ -967,17 +975,33 @@ function renderPanel(i){
       ${easy?`<div class="choices">${q.choices.map(c=>`<button class="choice" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>`:kbHtml()}`;
   } else if(P.ps==='col'){
     body=`<p class="msg good">${P.praise}</p><div class="qsent"><span class="corr">${corrHtml(q)}</span></div>
-      <div class="dragzone"><div class="tok ${tokClass(P.team)} dragtok" data-drag="${i}" aria-label="Ton jeton"></div>
-      <p class="hint">Glisse ton jeton au-dessus d'une colonne du plateau.</p></div>`;
+      <div class="aimzone"><p class="hint">Déplace ton jeton n°${i+1} :</p>
+      <div class="aim"><button data-aim="-1" aria-label="Vers la gauche"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button data-drop class="drop">Lâcher</button>
+      <button data-aim="1" aria-label="Vers la droite"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button></div></div>`;
   } else {
     body=`<p class="msg bad">Pas tout à fait…</p><p class="hint">La bonne réponse :</p><div class="qsent"><span class="corr">${corrHtml(q)}</span></div>
       <button class="big-btn blue" data-next>Question suivante</button>`;
   }
   el.innerHTML=head+body;
 }
+function freeCol(c,dir){
+  for(let k=0;k<COLS;k++){ const x=((c+dir*k)%COLS+COLS)%COLS; if(lowest(G.grid,x)>=0) return x; }
+  return -1;
+}
 function refreshColPick(){
-  G.players.forEach((P,i)=>{ if(P.ps!=='col') return;
-    sideEl(i).querySelectorAll('[data-col]').forEach(b=>b.disabled=lowest(G.grid,+b.dataset.col)<0); });
+  G.players.forEach(P=>{ if(P.ps==='col'&&lowest(G.grid,P.aim)<0) P.aim=freeCol(P.aim,1); });
+  renderGhosts();
+}
+function renderGhosts(){
+  const box=$('#ghosts'); if(!box) return;
+  if(!G||!G.simul||G.phase==='over'){ box.innerHTML=''; return; }
+  const ready=G.players.map((P,i)=>({P,i})).filter(o=>o.P.ps==='col'&&o.P.aim>=0);
+  box.innerHTML=ready.map(({P,i})=>{
+    const same=ready.filter(o=>o.P.aim===P.aim), n=same.length, j=same.findIndex(o=>o.i===i);
+    const k=n>1?.55:1, dx=n>1?`calc(var(--cell)*${((j-(n-1)/2)*.42).toFixed(2)})`:'0px';
+    return `<div class="tok mghost ${tokClass(P.team)}" style="--c:${P.aim};--k:${k};--dx:${dx}"><b>${i+1}</b></div>`;
+  }).join('');
 }
 function simAnswer(i,given){
   const P=G.players[i], q=P.q, ok=isRight(given,q);
@@ -985,7 +1009,7 @@ function simAnswer(i,given){
   const shown=joinP(q.pron,S.level==='easy'&&q.mode==='end'?q.stem+given:given.trim());
   G.hist.push({who:P.name,ok,tense:TL[q.t].label,exp:joinP(q.pron,q.form),got:shown});
   if(ok){
-    P.ok++; P.streak++; noteCorrect(); P.praise=rnd(PRAISE); P.ps='col'; SFX.good();
+    P.ok++; P.streak++; noteCorrect(); P.praise=rnd(PRAISE); P.ps='col'; P.aim=freeCol(Math.floor(COLS/2),1); SFX.good();
     if(P.streak>=3){ setTimeout(SFX.streak,300); toast(`${P.name} : série de ${P.streak} !`); }
     if(G.mode==='coop') G.chronoT=Math.max(0,G.chronoT-G.period*.15);
   } else {
@@ -994,7 +1018,7 @@ function simAnswer(i,given){
     P.fbT=setTimeout(()=>{ if(G&&G.phase!=='over'&&P.ps==='fb') simNew(i); },6000);
     if(G.mode==='coop') chronosDrop(`Erreur de ${P.name} : Chronos joue !`);
   }
-  renderPanel(i); renderChips();
+  renderPanel(i); renderChips(); renderGhosts();
 }
 $('#arena').addEventListener('click',e=>{
   if(!G||!G.simul||G.phase==='over') return;
@@ -1008,46 +1032,14 @@ $('#arena').addEventListener('click',e=>{
     if(k==='ok'){ if(P.buf.trim()) simAnswer(i,P.buf); return; }
     if(k==='del') P.buf=P.buf.slice(0,-1); else if(k==='clr') P.buf=''; else if(k==='sp') P.buf+=' '; else if(P.buf.length<30) P.buf+=k;
     const slot=side.querySelector('.slot'); if(slot) slot.textContent=P.buf||'…';
-  } else if(P.ps==='col'&&b.dataset.col!=null){
-    const c=+b.dataset.col; if(lowest(G.grid,c)<0) return;
-    SFX.click(); drop(c,P.team); if(G.phase!=='over') simNew(i); else renderPanel(i);
+  } else if(P.ps==='col'&&b.dataset.aim!=null){
+    const d=+b.dataset.aim, nx=freeCol(((P.aim+d)%COLS+COLS)%COLS,d); if(nx>=0){ P.aim=nx; tone(520+P.aim*40,.05,'triangle',.06); renderGhosts(); }
+  } else if(P.ps==='col'&&b.hasAttribute('data-drop')){
+    if(P.aim>=0&&lowest(G.grid,P.aim)>=0) placeToken(i,P.aim);
   } else if(P.ps==='fb'&&b.hasAttribute('data-next')){ clearTimeout(P.fbT); simNew(i); }
 });
 
-/* glisser le jeton au-dessus du plateau (plusieurs doigts à la fois) */
-const drags=new Map();
-function placeToken(i,c){ const P=G.players[i]; SFX.click(); drop(c,P.team); if(G.phase!=='over') simNew(i); else renderPanel(i); }
-function highlightCols(){ const on=new Set([...drags.values()].map(d=>d.col)); [...colsEl.children].forEach((b,c)=>b.classList.toggle('hov',on.has(c))); }
-function moveDrag(d,x,y){
-  const br=$('#board').getBoundingClientRect(), cell=br.width/COLS;
-  let c=null;
-  if(x>=br.left&&x<=br.right&&y<=br.bottom&&y>=br.top-cell*2.5) c=Math.min(COLS-1,Math.floor((x-br.left)/cell));
-  d.col=c;
-  if(c!=null){ d.fly.style.left=(br.left+cell*(c+.5))+'px'; d.fly.style.top=(br.top-cell*.5)+'px'; }
-  else { d.fly.style.left=x+'px'; d.fly.style.top=y+'px'; }
-  highlightCols();
-}
-$('#arena').addEventListener('pointerdown',e=>{
-  const t=e.target.closest('.dragtok'); if(!t||!G||!G.simul||G.phase==='over') return;
-  const i=+t.dataset.drag, P=G.players[i]; if(!P||P.ps!=='col') return;
-  e.preventDefault(); ac();
-  const cell=$('#board').getBoundingClientRect().width/COLS;
-  const fly=document.createElement('div'); fly.className='tok flytok '+tokClass(P.team);
-  fly.style.setProperty('--sz',(cell*.8)+'px'); document.body.appendChild(fly);
-  t.classList.add('gone');
-  try{ t.setPointerCapture(e.pointerId); }catch(_){}
-  const d={i,fly,src:t,col:null}; drags.set(e.pointerId,d); moveDrag(d,e.clientX,e.clientY);
-});
-addEventListener('pointermove',e=>{ const d=drags.get(e.pointerId); if(d){ e.preventDefault(); moveDrag(d,e.clientX,e.clientY); } });
-function endDrag(e){
-  const d=drags.get(e.pointerId); if(!d) return;
-  drags.delete(e.pointerId); d.fly.remove(); highlightCols();
-  const P=G&&G.players[d.i];
-  if(!P||P.ps!=='col'||G.phase==='over') return;
-  if(e.type==='pointerup'&&d.col!=null&&lowest(G.grid,d.col)>=0) placeToken(d.i,d.col);
-  else { d.src.classList.remove('gone'); if(d.col!=null) toast('Cette colonne est pleine'); }
-}
-addEventListener('pointerup',endDrag); addEventListener('pointercancel',endDrag);
+function placeToken(i,c){ const P=G.players[i]; P.ps='q'; SFX.click(); drop(c,P.team); if(G.phase!=='over') simNew(i); else renderPanel(i); renderGhosts(); }
 
 /* clavier : 1 à 7 pour la colonne, 1 à 3 pour les choix */
 addEventListener('keydown',e=>{
